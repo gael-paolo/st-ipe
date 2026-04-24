@@ -96,7 +96,65 @@ RPA Logystics IPE
         st.error(f"Error Correo: {e}")
         return False
 
-# 🔹 NUEVA FUNCIÓN: sumar días hábiles
+
+def enviar_correo_confirmacion(apv_email, data):
+    usuario = st.secrets["smtp_user"]
+    password = st.secrets["smtp_pass"]
+
+    msg = MIMEMultipart()
+    msg['Subject'] = f"✅ Confirmación Solicitud IPE - IDV: {data['IDV']}"
+    msg['From'] = usuario
+    msg['To'] = apv_email
+
+    tabla = f"""
+    <table border="1" cellpadding="6" cellspacing="0">
+        <tr><th>Campo</th><th>Valor</th></tr>
+        <tr><td>IDV</td><td>{data['IDV']}</td></tr>
+        <tr><td>Cliente</td><td>{data['Cliente']}</td></tr>
+        <tr><td>Vehículo</td><td>{data['Marca']} {data['Modelo']}</td></tr>
+        <tr><td>Color</td><td>{data['Color']}</td></tr>
+        <tr><td>APV</td><td>{data['APV']}</td></tr>
+        <tr><td>Sucursal</td><td>{data['Punto']}</td></tr>
+        <tr><td>Fecha Promesa</td><td>{data['Fecha_Promesa']}</td></tr>
+        <tr><td>Implementaciones</td><td>{data['Implementaciones']}</td></tr>
+        <tr><td>Condiciones</td><td>{data['Condiciones']}</td></tr>
+    </table>
+    """
+
+    cuerpo = f"""
+    <html>
+    <body>
+        <p>Hola,</p>
+        <p>Tu solicitud IPE ha sido registrada correctamente:</p>
+        {tabla}
+        <br>
+        <p>Equipo IPE 🚗</p>
+    </body>
+    </html>
+    """
+
+    msg.attach(MIMEText(cuerpo, 'html'))
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(usuario, password)
+            server.sendmail(usuario, apv_email, msg.as_string())
+
+        return True
+
+    except Exception as e:
+        st.error(f"Error correo confirmación: {e}")
+        return False
+
+
+def obtener_email_apv(df_maestros, apv):
+    fila = df_maestros[df_maestros["APV"] == apv]
+    if not fila.empty:
+        return fila.iloc[0]["Email"]
+    return None
+
+
 def sumar_dias_habiles(fecha, dias):
     f = fecha
     contador = 0
@@ -111,6 +169,22 @@ def sumar_dias_habiles(fecha, dias):
 # =========================================================
 conn = st.connection("gsheets", type=GSheetsConnection)
 URL_SHEET = st.secrets["spreadsheet"]
+
+# =========================================================
+# CARGA DE LISTAS
+# =========================================================
+@st.cache_data(ttl=300)
+def cargar_maestros():
+    df = conn.read(spreadsheet=URL_SHEET, worksheet="Maestros")
+    df = df.fillna("")
+    return df
+
+df_maestros = cargar_maestros()
+
+marcas = sorted(df_maestros["Marca"].unique())
+modelos = sorted(df_maestros["Modelo"].unique())
+apvs = sorted(df_maestros["APV"].unique())
+puntos = sorted(df_maestros["Punto"].unique())
 
 # =========================================================
 # HEADER
@@ -144,18 +218,18 @@ with tabs[0]:
 
             with col1:
                 idv = st.text_input("IDV*").upper().strip()
-                marca = st.text_input("Marca")
-                modelo = st.text_input("Modelo")
+                marca = st.selectbox("Marca", marcas)
+                modelo = st.selectbox("Modelo", modelos)
 
             with col2:
                 color = st.text_input("Color")
-                apv = st.text_input("APV")
+                apv = st.selectbox("APV", apvs)
 
         with st.expander("📋 Datos de Entrega", expanded=True):
             col1, col2 = st.columns(2)
 
             with col1:
-                punto = st.text_input("Sucursal de Entrega")
+                punto = st.selectbox("Sucursal de Entrega", puntos)
 
                 hoy = datetime.now()
                 fecha_minima = sumar_dias_habiles(hoy, 10)
@@ -232,6 +306,26 @@ with tabs[0]:
                         enviar_telegram(mensaje_html)
                         enviar_correo_taller(idv, cliente, apv, punto, marca, modelo)
 
+                        data_dict = {
+                            "IDV": idv,
+                            "Marca": marca,
+                            "Modelo": modelo,
+                            "Color": color,
+                            "APV": apv,
+                            "Punto": punto,
+                            "Fecha_Promesa": fecha_p.strftime('%d/%m/%Y'),
+                            "Cliente": cliente,
+                            "Implementaciones": impl,
+                            "Condiciones": cond
+                        }
+
+                        email_apv = obtener_email_apv(df_maestros, apv)
+
+                        if email_apv:
+                            enviar_correo_confirmacion(email_apv, data_dict)
+                        else:
+                            st.warning("⚠️ APV sin correo registrado en Maestros")
+
                         st.success("✅ Solicitud registrada correctamente")
                         st.balloons()
 
@@ -307,7 +401,6 @@ with tabs[-1]:
     df_s = df_s.astype(str)
     df_v = df_v.astype(str)
 
-    # 🔹 BUSQUEDA
     with st.expander("🔎 Búsqueda", expanded=True):
         query = st.text_input("Ingrese IDV")
 
