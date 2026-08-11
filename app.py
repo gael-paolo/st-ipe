@@ -13,6 +13,34 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="IPE Tracking", layout="wide", page_icon="🚗")
 
 # =========================================================
+# RESPONSIVE (MOBILE)
+# =========================================================
+st.markdown("""
+<style>
+@media (max-width: 640px) {
+    div[data-testid="column"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
+    div[data-testid="stHorizontalBlock"] {
+        flex-direction: column !important;
+    }
+    .block-container {
+        padding: 1rem 0.6rem !important;
+    }
+    div[data-testid="stForm"] button,
+    .stButton button {
+        width: 100% !important;
+    }
+    div[data-testid="stExpander"] summary {
+        font-size: 0.95rem !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =========================================================
 # LOGIN
 # =========================================================
 st.sidebar.title("🔐 Acceso")
@@ -48,7 +76,7 @@ def enviar_telegram(mensaje):
         return False
 
 
-def enviar_correo_taller(idv, cliente, apv, punto, marca, modelo):
+def enviar_correo_taller(idv, cliente, apv, punto, marca, modelo, impl, cond):
     usuario = st.secrets["smtp_user"]
     password = st.secrets["smtp_pass"]
 
@@ -73,6 +101,12 @@ DATOS DE VENTA:
 - APV: {apv}
 - Sucursal de Entrega: {punto}
 - Fecha de registro: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+
+IMPLEMENTACIONES:
+{impl if impl else 'Sin implementaciones adicionales'}
+
+CONDICIONES:
+{cond if cond else 'Ninguna'}
 
 Por favor, proceder a abrir una OT y procesarlo.
 Muchas gracias de antemano
@@ -211,6 +245,15 @@ with tabs[0]:
     st.header("Formulario de Solicitud")
     st.markdown("⚠️ Presione el botón para enviar")
 
+    if "impl" not in st.session_state:
+        st.session_state.impl = ""
+    if "cond" not in st.session_state:
+        st.session_state.cond = ""
+
+    with st.expander("⚙️ Detalles adicionales", expanded=True):
+        impl = st.text_area("Implementaciones", key="impl")
+        cond = st.text_area("Condiciones", key="cond")
+
     with st.form("registro", clear_on_submit=True):
 
         with st.expander("🚗 Datos del Vehículo", expanded=True):
@@ -232,7 +275,8 @@ with tabs[0]:
                 punto = st.selectbox("Sucursal de Entrega", puntos)
 
                 hoy = datetime.now()
-                fecha_minima = sumar_dias_habiles(hoy, 10)
+                dias_habiles = 6 if impl.strip() else 5
+                fecha_minima = sumar_dias_habiles(hoy, dias_habiles)
 
                 fecha_p = st.date_input(
                     "Fecha Promesa",
@@ -241,10 +285,6 @@ with tabs[0]:
 
             with col2:
                 cliente = st.text_input("Cliente")
-
-        with st.expander("⚙️ Detalles adicionales"):
-            impl = st.text_area("Implementaciones")
-            cond = st.text_area("Condiciones")
 
         btn = st.form_submit_button("🚀 Enviar Solicitud")
 
@@ -304,7 +344,7 @@ with tabs[0]:
                         """
 
                         enviar_telegram(mensaje_html)
-                        enviar_correo_taller(idv, cliente, apv, punto, marca, modelo)
+                        enviar_correo_taller(idv, cliente, apv, punto, marca, modelo, impl, cond)
 
                         data_dict = {
                             "IDV": idv,
@@ -328,6 +368,10 @@ with tabs[0]:
 
                         st.success("✅ Solicitud registrada correctamente")
                         st.balloons()
+
+                        st.session_state.impl = ""
+                        st.session_state.cond = ""
+                        st.rerun()
 
                 except Exception as e:
                     st.error(f"Error: {e}")
