@@ -215,10 +215,10 @@ def cargar_maestros():
 
 df_maestros = cargar_maestros()
 
-marcas = sorted(df_maestros["Marca"].unique())
-modelos = sorted(df_maestros["Modelo"].unique())
-apvs = sorted(df_maestros["APV"].unique())
-puntos = sorted(df_maestros["Punto"].unique())
+marcas = sorted(m for m in df_maestros["Marca"].unique() if m)
+modelos = sorted(m for m in df_maestros["Modelo"].unique() if m)
+apvs = sorted(a for a in df_maestros["APV"].unique() if a)
+puntos = sorted(p for p in df_maestros["Punto"].unique() if p)
 
 # =========================================================
 # HEADER
@@ -244,6 +244,11 @@ else:
 with tabs[0]:
     st.header("Formulario de Solicitud")
     st.markdown("⚠️ Presione el botón para enviar")
+
+    if st.session_state.get("solicitud_enviada"):
+        st.success(f"✅ Solicitud {st.session_state.get('solicitud_idv', '')} enviada de manera exitosa")
+        st.session_state.solicitud_enviada = False
+        st.session_state.solicitud_idv = ""
 
     with st.expander("🚗 Datos del Vehículo", expanded=True):
         col1, col2 = st.columns(2)
@@ -290,7 +295,7 @@ with tabs[0]:
     if btn:
         impl = impl if tiene_impl else ""
 
-        if not idv or not cliente:
+        if not idv or not cliente or not apv or not punto:
             st.error("⚠️ Campos obligatorios faltantes")
         elif not fecha_p:
             st.error("⚠️ Debe seleccionar la Fecha Promesa")
@@ -369,8 +374,8 @@ with tabs[0]:
                     else:
                         st.warning("⚠️ APV sin correo registrado en Maestros")
 
-                    st.success("✅ Solicitud registrada correctamente")
-                    st.balloons()
+                    st.session_state.solicitud_enviada = True
+                    st.session_state.solicitud_idv = idv
 
                     for k in ["idv", "color", "marca", "modelo", "apv",
                               "punto", "fecha_p", "cliente", "impl", "cond", "tiene_impl"]:
