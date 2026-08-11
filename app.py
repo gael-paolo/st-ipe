@@ -245,84 +245,78 @@ with tabs[0]:
     st.header("Formulario de Solicitud")
     st.markdown("⚠️ Presione el botón para enviar")
 
-    if "impl" not in st.session_state:
-        st.session_state.impl = ""
-    if "cond" not in st.session_state:
-        st.session_state.cond = ""
+    with st.expander("🚗 Datos del Vehículo", expanded=True):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            idv = st.text_input("IDV*", key="idv").upper().strip()
+            marca = st.selectbox("Marca", marcas, key="marca")
+            modelo = st.selectbox("Modelo", modelos, key="modelo")
+
+        with col2:
+            color = st.text_input("Color", key="color")
+            apv = st.selectbox("APV", apvs, key="apv")
 
     with st.expander("⚙️ Detalles adicionales", expanded=True):
         impl = st.text_area("Implementaciones", key="impl")
         cond = st.text_area("Condiciones", key="cond")
 
-    with st.form("registro", clear_on_submit=True):
+    with st.expander("📋 Datos de Entrega", expanded=True):
+        col1, col2 = st.columns(2)
 
-        with st.expander("🚗 Datos del Vehículo", expanded=True):
-            col1, col2 = st.columns(2)
+        with col1:
+            punto = st.selectbox("Sucursal de Entrega", puntos, key="punto")
 
-            with col1:
-                idv = st.text_input("IDV*").upper().strip()
-                marca = st.selectbox("Marca", marcas)
-                modelo = st.selectbox("Modelo", modelos)
+            hoy = datetime.now()
+            dias_habiles = 6 if impl.strip() else 5
+            fecha_minima = sumar_dias_habiles(hoy, dias_habiles)
 
-            with col2:
-                color = st.text_input("Color")
-                apv = st.selectbox("APV", apvs)
+            fecha_p = st.date_input(
+                "Fecha Promesa",
+                min_value=fecha_minima.date(),
+                key="fecha_p"
+            )
 
-        with st.expander("📋 Datos de Entrega", expanded=True):
-            col1, col2 = st.columns(2)
+        with col2:
+            cliente = st.text_input("Cliente", key="cliente")
 
-            with col1:
-                punto = st.selectbox("Sucursal de Entrega", puntos)
+    btn = st.button("🚀 Enviar Solicitud")
 
-                hoy = datetime.now()
-                dias_habiles = 6 if impl.strip() else 5
-                fecha_minima = sumar_dias_habiles(hoy, dias_habiles)
+    if btn:
+        if not idv or not cliente:
+            st.error("⚠️ Campos obligatorios faltantes")
+        else:
+            try:
+                data_actual = conn.read(spreadsheet=URL_SHEET, worksheet="Solicitudes")
 
-                fecha_p = st.date_input(
-                    "Fecha Promesa",
-                    min_value=fecha_minima.date()
+                data_actual['IDV'] = (
+                    data_actual['IDV']
+                    .astype(str)
+                    .str.replace('.0', '', regex=False)
+                    .str.strip()
                 )
 
-            with col2:
-                cliente = st.text_input("Cliente")
+                if idv in data_actual['IDV'].values:
+                    st.error(f"⚠️ El IDV {idv} ya existe")
+                else:
+                    nueva = pd.DataFrame([{
+                        "IDV": idv,
+                        "Marca": marca,
+                        "Modelo": modelo,
+                        "Color": color,
+                        "APV": apv,
+                        "Punto": punto,
+                        "Fecha_Promesa": str(fecha_p),
+                        "Cliente": cliente,
+                        "Implementaciones": impl,
+                        "Condiciones": cond,
+                        "Fecha_Registro": datetime.now().strftime("%Y-%m-%d %H:%M")
+                    }])
 
-        btn = st.form_submit_button("🚀 Enviar Solicitud")
+                    data_nueva = pd.concat([data_actual, nueva], ignore_index=True)
+                    conn.update(spreadsheet=URL_SHEET, worksheet="Solicitudes", data=data_nueva)
 
-        if btn:
-            if not idv or not cliente:
-                st.error("⚠️ Campos obligatorios faltantes")
-            else:
-                try:
-                    data_actual = conn.read(spreadsheet=URL_SHEET, worksheet="Solicitudes")
-
-                    data_actual['IDV'] = (
-                        data_actual['IDV']
-                        .astype(str)
-                        .str.replace('.0', '', regex=False)
-                        .str.strip()
-                    )
-
-                    if idv in data_actual['IDV'].values:
-                        st.error(f"⚠️ El IDV {idv} ya existe")
-                    else:
-                        nueva = pd.DataFrame([{
-                            "IDV": idv,
-                            "Marca": marca,
-                            "Modelo": modelo,
-                            "Color": color,
-                            "APV": apv,
-                            "Punto": punto,
-                            "Fecha_Promesa": str(fecha_p),
-                            "Cliente": cliente,
-                            "Implementaciones": impl,
-                            "Condiciones": cond,
-                            "Fecha_Registro": datetime.now().strftime("%Y-%m-%d %H:%M")
-                        }])
-
-                        data_nueva = pd.concat([data_actual, nueva], ignore_index=True)
-                        conn.update(spreadsheet=URL_SHEET, worksheet="Solicitudes", data=data_nueva)
-
-                        mensaje_html = f"""
+                    mensaje_html = f"""
 <b>🚀 NUEVA SOLICITUD DE ALISTAMIENTO</b>
 ────────────────────────
 <b>🆔 IDV:</b> <code>{idv}</code>
@@ -341,40 +335,42 @@ with tabs[0]:
 <i>{cond if cond else 'Ninguna'}</i>
 ────────────────────────
 <i>Registrado el {datetime.now().strftime('%d/%m/%Y %H:%M')}</i>
-                        """
+                    """
 
-                        enviar_telegram(mensaje_html)
-                        enviar_correo_taller(idv, cliente, apv, punto, marca, modelo, impl, cond)
+                    enviar_telegram(mensaje_html)
+                    enviar_correo_taller(idv, cliente, apv, punto, marca, modelo, impl, cond)
 
-                        data_dict = {
-                            "IDV": idv,
-                            "Marca": marca,
-                            "Modelo": modelo,
-                            "Color": color,
-                            "APV": apv,
-                            "Punto": punto,
-                            "Fecha_Promesa": fecha_p.strftime('%d/%m/%Y'),
-                            "Cliente": cliente,
-                            "Implementaciones": impl,
-                            "Condiciones": cond
-                        }
+                    data_dict = {
+                        "IDV": idv,
+                        "Marca": marca,
+                        "Modelo": modelo,
+                        "Color": color,
+                        "APV": apv,
+                        "Punto": punto,
+                        "Fecha_Promesa": fecha_p.strftime('%d/%m/%Y'),
+                        "Cliente": cliente,
+                        "Implementaciones": impl,
+                        "Condiciones": cond
+                    }
 
-                        email_apv = obtener_email_apv(df_maestros, apv)
+                    email_apv = obtener_email_apv(df_maestros, apv)
 
-                        if email_apv:
-                            enviar_correo_confirmacion(email_apv, data_dict)
-                        else:
-                            st.warning("⚠️ APV sin correo registrado en Maestros")
+                    if email_apv:
+                        enviar_correo_confirmacion(email_apv, data_dict)
+                    else:
+                        st.warning("⚠️ APV sin correo registrado en Maestros")
 
-                        st.success("✅ Solicitud registrada correctamente")
-                        st.balloons()
+                    st.success("✅ Solicitud registrada correctamente")
+                    st.balloons()
 
-                        st.session_state.impl = ""
-                        st.session_state.cond = ""
-                        st.rerun()
+                    for k in ["idv", "color", "marca", "modelo", "apv",
+                              "punto", "fecha_p", "cliente", "impl", "cond"]:
+                        if k in st.session_state:
+                            del st.session_state[k]
+                    st.rerun()
 
-                except Exception as e:
-                    st.error(f"Error: {e}")
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 # =========================================================
 # 2. TALLER
