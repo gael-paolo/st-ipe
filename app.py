@@ -80,14 +80,14 @@ def enviar_correo_taller(idv, cliente, apv, punto, marca, modelo, impl, cond):
     usuario = st.secrets["smtp_user"]
     password = st.secrets["smtp_pass"]
 
-    destinatario = st.secrets["correo_to"]
-    copia = st.secrets["correo_cc"]
+    destinatarios = [d.strip() for d in st.secrets["correo_to"].split(",") if d.strip()]
+    copias = [c.strip() for c in st.secrets["correo_cc"].split(",") if c.strip()]
 
     msg = MIMEMultipart()
     msg['Subject'] = f"🔔 NUEVA SOLICITUD - IDV: {idv}"
     msg['From'] = usuario
-    msg['To'] = destinatario
-    msg['Cc'] = copia
+    msg['To'] = ", ".join(destinatarios)
+    msg['Cc'] = ", ".join(copias)
 
     cuerpo = f"""
 Se ha generado una nueva solicitud de IPE.
@@ -121,8 +121,7 @@ RPA Logystics IPE
             server.starttls()
             server.login(usuario, password)
 
-            destinatarios = [destinatario] + copia.split(",")
-            server.sendmail(usuario, destinatarios, msg.as_string())
+            server.sendmail(usuario, destinatarios + copias, msg.as_string())
 
         return True
 
