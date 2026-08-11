@@ -258,7 +258,8 @@ with tabs[0]:
             apv = st.selectbox("APV", apvs, key="apv")
 
     with st.expander("⚙️ Detalles adicionales", expanded=True):
-        impl = st.text_area("Implementaciones", key="impl")
+        tiene_impl = st.checkbox("¿Tiene implementaciones?", key="tiene_impl")
+        impl = st.text_area("Implementaciones", key="impl", disabled=not tiene_impl)
         cond = st.text_area("Condiciones", key="cond")
 
     with st.expander("📋 Datos de Entrega", expanded=True):
@@ -268,11 +269,15 @@ with tabs[0]:
             punto = st.selectbox("Sucursal de Entrega", puntos, key="punto")
 
             hoy = datetime.now()
-            dias_habiles = 6 if impl.strip() else 5
+            dias_habiles = 6 if tiene_impl else 5
             fecha_minima = sumar_dias_habiles(hoy, dias_habiles)
+
+            if st.session_state.get("fecha_p") and st.session_state.fecha_p < fecha_minima.date():
+                st.session_state.fecha_p = None
 
             fecha_p = st.date_input(
                 "Fecha Promesa",
+                value=None,
                 min_value=fecha_minima.date(),
                 key="fecha_p"
             )
@@ -283,8 +288,12 @@ with tabs[0]:
     btn = st.button("🚀 Enviar Solicitud")
 
     if btn:
+        impl = impl if tiene_impl else ""
+
         if not idv or not cliente:
             st.error("⚠️ Campos obligatorios faltantes")
+        elif not fecha_p:
+            st.error("⚠️ Debe seleccionar la Fecha Promesa")
         else:
             try:
                 data_actual = conn.read(spreadsheet=URL_SHEET, worksheet="Solicitudes")
@@ -364,7 +373,7 @@ with tabs[0]:
                     st.balloons()
 
                     for k in ["idv", "color", "marca", "modelo", "apv",
-                              "punto", "fecha_p", "cliente", "impl", "cond"]:
+                              "punto", "fecha_p", "cliente", "impl", "cond", "tiene_impl"]:
                         if k in st.session_state:
                             del st.session_state[k]
                     st.rerun()
